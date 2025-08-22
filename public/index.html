@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Stores Rating - platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family: Arial, Helvetica, sans-serif; padding: 12px; max-width:1000px; margin:auto;}
+    header{display:flex;justify-content:space-between;align-items:center}
+    .card{border:1px solid #ddd;padding:12px;margin:8px 0;border-radius:6px}
+    input,button,select,textarea{padding:8px;margin:4px 0;width:100%}
+    .row{display:flex;gap:8px}
+    .col{flex:1}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #eee;padding:8px;text-align:left}
+  </style>
+</head>
+<body>
+  <header>
+    <h2>Stores Rating - platform</h2>
+    <div id="auth"></div>
+  </header>
+  <div id="app"></div>
+
+  <!-- React UMD -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+  <script>
+  const e = React.createElement;
+  const useState = React.useState;
+  const useEffect = React.useEffect;
+
+  function api(path, method='GET', body) {
+    const token = localStorage.getItem('token');
+    const headers = {'Content-Type':'application/json'};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    return fetch('/api' + path, {method, headers, body: body && JSON.stringify(body)})
+      .then(r => r.json().then(j => { if (!r.ok) throw j; return j; }));
+  }
+
+  function AuthBar({onChange}) {
+    const [user,setUser] = useState(null);
+    useEffect(() => {
+      const t = localStorage.getItem('token');
+      if (t) {
+        api('/me').then(u => setUser(u)).catch(()=>setUser(null));
+      }
+    }, []);
+    function logout(){ localStorage.removeItem('token'); setUser(null); onChange && onChange(null); }
+    return e('div',{},
+      user ? e('div',{}, e('span',{}, 'Hi, '+user.name+' ('+user.role+') '), e('button',{onClick:logout},'Logout')) :
+      e('div',{}, e('button',{onClick:()=>{App.show('login')}}, 'Login / Signup'))
+    );
+  }
+
+  // Simple router
+  const App = {
+    root: document.getElementById('app'),
+    show: null
+  };
+
+  function render(component) {
+    ReactDOM.createRoot(App.root).render(component);
+    // update auth bar
+    ReactDOM.createRoot(document.getElementById('auth')).render(e(AuthBar,{onChange:()=>App.show('home')}));
+  }
+
+  function Home() {
+    const [stores,setStores] = useState([]);
+    const [q,setQ] = useState('');
+    useEffect(()=>{ load(); }, []);
+    function load(){ api('/stores').then(data=>setStores(data)).catch(()=>setStores([])); }
+    return e('div',{},
+      e('div',{className:'card'},
+        e('h3',{}, 'Stores'),
+        e('div',{}, e('input',{placeholder:'Search', value:q, onChange: (e)=>setQ(e.target.value)}),
+          e('button',{onClick: ()=>api('/stores?'+new URLSearchParams({q})).then(d=>setStores(d)).catch(()=>{})}, 'Search'),
+          e('button',{onClick: ()=>{ App.show('login') }}, 'Login to rate')
+        )
+      ),
+      e('div',{}, stores.map(s=> e('div',{className:'card', key:s.id},
+        e('h4',{}, s.name + ' — Avg: ' + (Number(s.overallRating).toFixed(2))),
+        e('div',{}, 'Address: ' + s.address),
+        e('div',{}, 'Your rating: ' + (s.yourRating || '—')),
+        e('div',{},
+          e('select',{id:'r_'+s.id}, [1,2,3,4,5].map(n=> e('option',{value:n, key:n}, n))),
+          e('button',{onClick: ()=> {
+            const val = Number(document.getElementById('r_'+s.id).value);
+            api('/stores/'+s.id+'/rate','POST',{rating: val}).then(()=>load()).catch(err=>alert(err.error||'Error'));
+          }}, 'Submit rating')
+        )
+      )))
+    );
+  }
+
+  function Login() {
+    const [email,setEmail] = useState('');
+    const [password,setPassword] = useState('');
+    const [name,setName] = useState('');
+    const [address,setAddress] = useState('');
+    const [mode,setMode] = useState('login');
+    function doLogin(){
+      api('/login','POST',{email,password}).then(r=>{ localStorage.setItem('token', r.token); App.show('home'); }).catch(err=>alert(err.error||'Login failed'));
+    }
+    function doSignup(){
+      api('/signup','POST',{name,email,address,password}).then(()=>{ alert('Signup success — please login'); setMode('login'); }).catch(err=>alert(err.error||'Signup failed: '+(err.error||JSON.stringify(err))));
+    }
+    return e('div',{},
+      e('div',{className:'card'},
+        e('h3',{}, mode==='login' ? 'Login' : 'Signup'),
+        mode==='signup' && e('div',{}, e('input',{placeholder:'Full Name (20-60 chars)', value:name, onChange:(e)=>setName(e.target.value)})),
+        e('div',{}, e('input',{placeholder:'Email', value:email, onChange:(e)=>setEmail(e.target.value)})),
+        mode==='signup' && e('div',{}, e('textarea',{placeholder:'Address (max 400 chars)', value:address, onChange:(e)=>setAddress(e.target.value)})),
+        e('div',{}, e('input',{placeholder:'Password', type:'password', value:password, onChange:(e)=>setPassword(e.target.value)})),
+        e('div',{},
+          mode==='login' ? e('button',{onClick:doLogin}, 'Login') : e('button',{onClick:doSignup}, 'Signup'),
+          e('button',{onClick:()=>setMode(mode==='login'?'signup':'login')}, mode==='login' ? 'Switch to Signup' : 'Switch to Login')
+        )
+      )
+    );
+  }
+
+  // initialize to home
+  App.show = (page) => {
+    if (page === 'home') render(e(Home));
+    if (page === 'login') render(e(Login));
+  };
+
+  App.show('home');
+  </script>
+</body>
+</html>
