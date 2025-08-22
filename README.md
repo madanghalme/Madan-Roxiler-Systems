@@ -1,4 +1,4 @@
-# FullStack -stores platform 
+# FullStack - stores platform 
 ======================
 
 FullStack Intern Coding Challenge.
