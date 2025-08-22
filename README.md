@@ -1,7 +1,7 @@
 # FullStack -stores platform 
 ======================
 
-This bundle provides a compact demo implementation for the FullStack Intern Coding Challenge.
+FullStack Intern Coding Challenge.
 
 What it includes
 - Express backend (server.js) using SQLite (data.db) for persistence.
